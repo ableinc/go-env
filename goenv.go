@@ -20,9 +20,14 @@ func readFile(filepath string, ch chan string) []string {
 func addEnvs(endPos int, chunkSize int, entries []string, ch chan string, name string, wg *sync.WaitGroup) {
 	defer wg.Done()
 	slice := entries[endPos-chunkSize : endPos]
+	var err error
 	for i := range len(slice) {
 		keyValue := strings.Split(slice[i], "=")
-		err := os.Setenv(keyValue[0], keyValue[1])
+		if len(keyValue) == 1 {
+			err = os.Setenv(keyValue[0], "")
+		} else {
+			err = os.Setenv(keyValue[0], keyValue[1])
+		}
 		if err != nil {
 			ch <- fmt.Sprintf("%s Error\n", name)
 		}
