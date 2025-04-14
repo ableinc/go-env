@@ -1,4 +1,4 @@
-package main
+package goenv
 
 import (
 	"fmt"
@@ -56,8 +56,4 @@ func LoadEnv(filepath string, verbose bool) {
 		}
 		fmt.Printf("Completion time: %f seconds\n", end.Sub(start).Seconds())
 	}
-}
-
-func main() {
-	LoadEnv(".env", true)
 }
