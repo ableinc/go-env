@@ -22,7 +22,7 @@ func addEnvs(endPos int, chunkSize int, entries []string, ch chan string, name s
 	slice := entries[endPos-chunkSize : endPos]
 	for i := range len(slice) {
 		before, after, _ := strings.Cut(slice[i], "=")
-		err := os.Setenv(before, after)
+		err := os.Setenv(before, strings.Trim(after, `"`))
 		if err != nil {
 			ch <- fmt.Sprintf("%s Error\n", name)
 		}
