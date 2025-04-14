@@ -13,5 +13,5 @@ go get github.com/ableinc/go-env
 ```go
 import "github.com/ableinc/go-env"
 
-LoadEnv(".env", false)
+goenv.LoadEnv(".env", false)
 ```
