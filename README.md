@@ -15,3 +15,15 @@ import "github.com/ableinc/go-env"
 
 goenv.LoadEnv(".env", false)
 ```
+
+## Run Tests
+
+```bash
+make test
+```
+
+## Build from Source
+
+```bash
+make build
+```

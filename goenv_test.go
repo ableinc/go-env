@@ -2,35 +2,22 @@ package goenv
 
 import (
 	"os"
-	"strings"
+	"path/filepath"
+	"runtime"
 	"testing"
 )
 
-func writeTempEnvFile(t *testing.T, contents string) string {
+func fixturePath(t *testing.T, name string) string {
 	t.Helper()
-	tmpFile, err := os.CreateTemp("", ".env.test")
-	if err != nil {
-		t.Fatalf("Failed to create temp file: %v", err)
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("Failed to resolve fixture path")
 	}
-	_, err = tmpFile.WriteString(contents)
-	if err != nil {
-		t.Fatalf("Failed to write to temp file: %v", err)
-	}
-	tmpFile.Close()
-	return tmpFile.Name()
+	return filepath.Join(filepath.Dir(file), "testdata", name)
 }
 
 func TestLoadEnvBasic(t *testing.T) {
-	content := `
-# This is a comment
-APP_ENV=production
-DB_HOST=localhost
-DB_USER=root
-DB_PASS="supersecret"
-# Another comment
-`
-	file := writeTempEnvFile(t, content)
-	defer os.Remove(file)
+	file := fixturePath(t, "basic.env.test")
 
 	LoadEnv(file, false)
 
@@ -42,6 +29,7 @@ DB_PASS="supersecret"
 	}
 
 	for key, expected := range tests {
+		t.Cleanup(func() { _ = os.Unsetenv(key) })
 		value := os.Getenv(key)
 		if value != expected {
 			t.Errorf("Expected %s = %s, got %s", key, expected, value)
@@ -49,42 +37,49 @@ DB_PASS="supersecret"
 	}
 }
 
-func TestLoadEnvWithMoreThan20Lines(t *testing.T) {
-	var builder strings.Builder
-	for i := 0; i < 25; i++ {
-		builder.WriteString("KEY")
-		builder.WriteString(string('A' + rune(i)))
-		builder.WriteString("=VALUE")
-		builder.WriteString(string('A' + rune(i)))
-		builder.WriteString("\n")
-	}
-	file := writeTempEnvFile(t, builder.String())
-	defer os.Remove(file)
+func TestLoadEnvUnder50File(t *testing.T) {
+	file := fixturePath(t, "under-50.env.test")
 
 	LoadEnv(file, false)
 
-	for i := 0; i < 25; i++ {
-		key := "KEY" + string('A'+rune(i))
-		expected := "VALUE" + string('A'+rune(i))
-		value := os.Getenv(key)
-		if value != expected {
+	tests := map[string]string{
+		"UKEY01": "VALUE01",
+		"UKEY05": "VALUE05",
+		"UKEY10": "VALUE10",
+	}
+	for key, expected := range tests {
+		t.Cleanup(func() { _ = os.Unsetenv(key) })
+		if value := os.Getenv(key); value != expected {
+			t.Errorf("Expected %s = %s, got %s", key, expected, value)
+		}
+	}
+}
+
+func TestLoadEnvOver50File(t *testing.T) {
+	file := fixturePath(t, "over-50.env.test")
+
+	LoadEnv(file, false)
+
+	tests := map[string]string{
+		"OKEY01": "VALUE01",
+		"OKEY25": "VALUE25",
+		"OKEY60": "VALUE60",
+	}
+	for key, expected := range tests {
+		t.Cleanup(func() { _ = os.Unsetenv(key) })
+		if value := os.Getenv(key); value != expected {
 			t.Errorf("Expected %s = %s, got %s", key, expected, value)
 		}
 	}
 }
 
 func TestLoadEnvIgnoresInvalidLines(t *testing.T) {
-	content := `
-VALID_KEY=valid_value
-INVALIDLINE
-# Comment
-ANOTHER_VALID=42
-`
-	file := writeTempEnvFile(t, content)
-	defer os.Remove(file)
+	file := fixturePath(t, "invalid.env.test")
 
 	LoadEnv(file, false)
 
+	t.Cleanup(func() { _ = os.Unsetenv("VALID_KEY") })
+	t.Cleanup(func() { _ = os.Unsetenv("ANOTHER_VALID") })
 	if os.Getenv("VALID_KEY") != "valid_value" {
 		t.Error("VALID_KEY should be set to valid_value")
 	}
@@ -97,12 +92,7 @@ ANOTHER_VALID=42
 }
 
 func TestLoadEnvDuplicateKeysLastWins(t *testing.T) {
-	content := `
-DUP_KEY=first
-DUP_KEY=second
-`
-	file := writeTempEnvFile(t, content)
-	defer os.Remove(file)
+	file := fixturePath(t, "duplicate.env.test")
 	defer os.Unsetenv("DUP_KEY")
 
 	LoadEnv(file, false)
