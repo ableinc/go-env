@@ -114,7 +114,7 @@ func LoadEnv(filepath string, verbose bool) {
 
 	workerCount := 1
 	if len(pairs) >= MAX_ENV_THRESHOLD {
-		workerCount = max(max(runtime.NumCPU(), 1), len(pairs))
+		workerCount = min(max(runtime.NumCPU(), 1), len(pairs))
 	}
 	chunkSize := (len(pairs) + workerCount - 1) / workerCount
 
