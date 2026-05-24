@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"reflect"
 	"runtime"
+	"strconv"
 	"sync"
 	"time"
+	"unicode"
 )
 
 type envPair struct {
@@ -15,6 +18,7 @@ type envPair struct {
 }
 
 const MAX_ENV_THRESHOLD = 50
+const DEFAULT_ENV_FILE = ".env"
 
 // parseEnvFile parses .env file contents into key/value pairs, ignoring blanks and comments.
 func parseEnvFile(data []byte) []envPair {
@@ -150,4 +154,138 @@ func LoadEnv(filepath string, verbose bool) {
 	if verbose {
 		fmt.Printf("Completion time: %f seconds\n", time.Since(start).Seconds())
 	}
+}
+
+// splitWords converts a CamelCase field name to UPPER_SNAKE_CASE for env var lookup.
+// e.g. "ManualOverride" -> "MANUAL_OVERRIDE", "DBHost" -> "D_B_HOST"
+func splitWords(name string) string {
+	var buf bytes.Buffer
+	runes := []rune(name)
+	for i, r := range runes {
+		if i > 0 && unicode.IsUpper(r) {
+			prev := runes[i-1]
+			next := rune(0)
+			if i+1 < len(runes) {
+				next = runes[i+1]
+			}
+			// Insert underscore before a capital that follows a lowercase,
+			// or before a capital that precedes a lowercase (e.g. "DBHost" → "DB_Host").
+			if unicode.IsLower(prev) || (unicode.IsUpper(prev) && unicode.IsLower(next)) {
+				buf.WriteByte('_')
+			}
+		}
+		buf.WriteRune(unicode.ToUpper(r))
+	}
+	return buf.String()
+}
+
+// setField assigns a string env value to a struct field, converting to the field's type.
+func setField(fv reflect.Value, val string) error {
+	switch fv.Kind() {
+	case reflect.String:
+		fv.SetString(val)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		if val == "" {
+			return nil
+		}
+		n, err := strconv.ParseInt(val, 10, 64)
+		if err != nil {
+			return err
+		}
+		fv.SetInt(n)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		if val == "" {
+			return nil
+		}
+		n, err := strconv.ParseUint(val, 10, 64)
+		if err != nil {
+			return err
+		}
+		fv.SetUint(n)
+	case reflect.Float32, reflect.Float64:
+		if val == "" {
+			return nil
+		}
+		n, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			return err
+		}
+		fv.SetFloat(n)
+	case reflect.Bool:
+		if val == "" {
+			return nil
+		}
+		b, err := strconv.ParseBool(val)
+		if err != nil {
+			return err
+		}
+		fv.SetBool(b)
+	}
+	return nil
+}
+
+// Process loads environment variables from an optional .env file into a struct.
+// Supported struct tags:
+//   - envconfig:"KEY"    – env var name to look up (required to process the field, unless split_words is set)
+//   - split_words:"true" – derive the env key from the field name (CamelCase → UPPER_SNAKE_CASE); ignored when envconfig is also set
+//   - required:"true"    – return an error if no value is available (env var and default are both empty)
+//   - default:"value"    – fallback value when the env var is unset or empty
+//   - ignored:"true"     – skip the field entirely
+//
+// If filepath is nil, no file is loaded and only existing environment variables are used.
+func Process(filepath *string, s *interface{}) error {
+	if filepath != nil {
+		LoadEnv(*filepath, false)
+	}
+
+	if s == nil {
+		return fmt.Errorf("Process: nil struct pointer")
+	}
+
+	// *interface{} -> interface{} -> concrete struct (or pointer to struct)
+	iface := reflect.ValueOf(s).Elem()
+	if iface.Kind() != reflect.Interface {
+		return fmt.Errorf("Process: expected interface, got %s", iface.Kind())
+	}
+	inner := iface.Elem()
+	if inner.Kind() == reflect.Ptr {
+		inner = inner.Elem()
+	}
+	if inner.Kind() != reflect.Struct {
+		return fmt.Errorf("Process: expected struct, got %s", inner.Kind())
+	}
+
+	t := inner.Type()
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		fv := inner.Field(i)
+
+		if !fv.CanSet() || field.Tag.Get("ignored") == "true" {
+			continue
+		}
+
+		envKey := field.Tag.Get("envconfig")
+		if envKey == "" {
+			if field.Tag.Get("split_words") == "true" {
+				envKey = splitWords(field.Name)
+			} else {
+				continue
+			}
+		}
+
+		envVal := os.Getenv(envKey)
+		if envVal == "" {
+			if def := field.Tag.Get("default"); def != "" {
+				envVal = def
+			} else if field.Tag.Get("required") == "true" {
+				return fmt.Errorf("Process: required env var %q is not set", envKey)
+			}
+		}
+
+		if err := setField(fv, envVal); err != nil {
+			return fmt.Errorf("Process: field %s: %w", field.Name, err)
+		}
+	}
+
+	return nil
 }
