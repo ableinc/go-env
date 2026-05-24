@@ -77,15 +77,10 @@ func dedupePairs(pairs []envPair) []envPair {
 }
 
 // setEnvFromPairs sets environment variables from key/value pairs.
-func setEnvFromPairs(pairs []envPair, ch chan<- string, name string, wg *sync.WaitGroup) {
+func setEnvFromPairs(pairs []envPair, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for _, pair := range pairs {
-		if err := os.Setenv(pair.key, pair.value); err != nil && ch != nil {
-			ch <- fmt.Sprintf("%s: Error setting %s", name, pair.key)
-		}
-	}
-	if ch != nil {
-		ch <- fmt.Sprintf("%s Complete", name)
+		os.Setenv(pair.key, pair.value)
 	}
 }
 
@@ -195,7 +190,7 @@ func LoadEnv(filepath ...string) {
 	for i := 0; i < len(pairs); i += chunkSize {
 		end := min(i+chunkSize, len(pairs))
 		wg.Add(1)
-		go setEnvFromPairs(pairs[i:end], nil, fmt.Sprintf("Worker %d", i/chunkSize+1), &wg)
+		go setEnvFromPairs(pairs[i:end], &wg)
 	}
 
 	wg.Wait()
