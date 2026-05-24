@@ -1,6 +1,6 @@
 # Go env
 
-A simple library to load environment variables from a file into your program at runtime. For large `.env` files (50+ variables), it splits the work across goroutines based on the number of CPUs. If the same key appears multiple times, the last occurrence wins.
+A simple library to load environment variables from a file into your program at runtime. If the same key appears multiple times, the last occurrence wins. Inline comments (`# ...`) are stripped from unquoted values; quoted values (`"..."` or `'...'`) are taken verbatim.
 
 ## Install
 

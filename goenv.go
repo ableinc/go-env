@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
-	"runtime"
 	"strconv"
-	"sync"
 	"time"
 	"unicode"
 )
@@ -17,7 +15,6 @@ type envPair struct {
 	value string
 }
 
-const MAX_ENV_THRESHOLD = 50
 const DEFAULT_ENV_FILE = ".env"
 
 // parseEnvFile parses .env file contents into key/value pairs, ignoring blanks and comments.
@@ -52,7 +49,22 @@ func parseEnvFile(data []byte) []envPair {
 			continue
 		}
 		value := bytes.TrimSpace(line[eq+1:])
-		value = bytes.Trim(value, `"`)
+		if len(value) > 0 && (value[0] == '"' || value[0] == '\'') {
+			quote := value[0]
+			closeIdx := bytes.IndexByte(value[1:], quote)
+			if closeIdx >= 0 {
+				value = value[1 : closeIdx+1]
+			} else {
+				value = value[1:]
+			}
+		} else {
+			// strip inline comments: ' #' or '\t#'
+			if idx := bytes.Index(value, []byte(" #")); idx >= 0 {
+				value = bytes.TrimSpace(value[:idx])
+			} else if idx := bytes.Index(value, []byte("\t#")); idx >= 0 {
+				value = bytes.TrimSpace(value[:idx])
+			}
+		}
 		pairs = append(pairs, envPair{key: string(key), value: string(value)})
 	}
 
@@ -75,14 +87,6 @@ func dedupePairs(pairs []envPair) []envPair {
 		write--
 	}
 	return pairs[write+1:]
-}
-
-// setEnvFromPairs sets environment variables from key/value pairs.
-func setEnvFromPairs(pairs []envPair, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for _, pair := range pairs {
-		os.Setenv(pair.key, pair.value)
-	}
 }
 
 // readFile reads the .env file contents, defaulting to DEFAULT_ENV_FILE if no path is given.
@@ -172,7 +176,7 @@ func setField(fv reflect.Value, val string) error {
 	return nil
 }
 
-// LoadEnv loads environment variables from a .env file using parallel goroutines.
+// LoadEnv loads environment variables from a .env file into the process environment.
 // If no filepath is provided, it defaults to DEFAULT_ENV_FILE (".env").
 func LoadEnv(filepath ...string) {
 	file := ""
@@ -191,21 +195,9 @@ func LoadEnv(filepath ...string) {
 	}
 	pairs = dedupePairs(pairs)
 
-	workerCount := 1
-	if len(pairs) >= MAX_ENV_THRESHOLD {
-		workerCount = min(max(runtime.NumCPU(), 1), len(pairs))
+	for _, pair := range pairs {
+		os.Setenv(pair.key, pair.value)
 	}
-	chunkSize := (len(pairs) + workerCount - 1) / workerCount
-
-	var wg sync.WaitGroup
-
-	for i := 0; i < len(pairs); i += chunkSize {
-		end := min(i+chunkSize, len(pairs))
-		wg.Add(1)
-		go setEnvFromPairs(pairs[i:end], &wg)
-	}
-
-	wg.Wait()
 }
 
 // Process loads environment variables from an optional .env file into a struct.

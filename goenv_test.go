@@ -303,3 +303,27 @@ func TestProcessNonPointer(t *testing.T) {
 		t.Fatal("expected error for non-pointer input, got nil")
 	}
 }
+
+func TestLoadEnvInlineCommentStripped(t *testing.T) {
+	file := fixturePath(t, "inline-comment.env.test")
+	keys := []string{"DATABASE_URL", "MIGRATIONS_DIR", "DOUBLE_QUOTED", "SINGLE_QUOTED", "NO_COMMENT", "URL_HASH"}
+	for _, k := range keys {
+		t.Cleanup(func() { _ = os.Unsetenv(k) })
+	}
+
+	LoadEnv(file)
+
+	tests := map[string]string{
+		"DATABASE_URL":   "postgres://user:pass@localhost:5432/db?sslmode=disable",
+		"MIGRATIONS_DIR": "./migrations",
+		"DOUBLE_QUOTED":  "http://localhost:3030/payment/success",
+		"SINGLE_QUOTED":  "http://localhost:3030/payment/cancel",
+		"NO_COMMENT":     "plainvalue",
+		"URL_HASH":       "http://example.com#fragment",
+	}
+	for key, expected := range tests {
+		if got := os.Getenv(key); got != expected {
+			t.Errorf("%s: expected %q, got %q", key, expected, got)
+		}
+	}
+}
