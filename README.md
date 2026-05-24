@@ -1,6 +1,6 @@
 # Go env
 
-A simple library to import environment variables from a file into your program at runtime. For large (files with more than 20 variables) it will split the env file into even chunks based on number of CPUs on your machine, then add the variables to your environment. 
+A simple library to import environment variables from a file into your program at runtime. For large `.env` files, it will split the env file into even chunks based on the number of CPUs on your machine, then add the variables to your environment. If the same key appears multiple times, the last occurrence wins to reduce collisions.
 
 ## How to use
 

@@ -95,3 +95,19 @@ ANOTHER_VALID=42
 		t.Error("INVALIDLINE should not be set")
 	}
 }
+
+func TestLoadEnvDuplicateKeysLastWins(t *testing.T) {
+	content := `
+DUP_KEY=first
+DUP_KEY=second
+`
+	file := writeTempEnvFile(t, content)
+	defer os.Remove(file)
+	defer os.Unsetenv("DUP_KEY")
+
+	LoadEnv(file, false)
+
+	if os.Getenv("DUP_KEY") != "second" {
+		t.Error("DUP_KEY should use the last value in the file")
+	}
+}
