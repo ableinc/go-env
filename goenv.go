@@ -94,66 +94,12 @@ func setEnvFromPairs(pairs []envPair, ch chan<- string, name string, wg *sync.Wa
 	}
 }
 
-// LoadEnv loads environment variables from a .env file using parallel goroutines.
-func LoadEnv(filepath string, verbose bool) {
-	start := time.Now()
-	if verbose {
-		fmt.Printf("Loading %s\n", filepath)
+// readFile reads the .env file contents, defaulting to .env if filepath is nil.
+func readFile(filepath *string) ([]byte, error) {
+	if filepath == nil {
+		return os.ReadFile(DEFAULT_ENV_FILE)
 	}
-
-	fileBytes, err := os.ReadFile(filepath)
-	if err != nil {
-		if verbose {
-			fmt.Printf("Failed to open file: %v\n", err)
-		}
-		return
-	}
-
-	pairs := parseEnvFile(fileBytes)
-	if len(pairs) == 0 {
-		if verbose {
-			fmt.Println("No valid environment variables found.")
-		}
-		return
-	}
-	pairs = dedupePairs(pairs)
-
-	workerCount := 1
-	if len(pairs) >= MAX_ENV_THRESHOLD {
-		workerCount = min(max(runtime.NumCPU(), 1), len(pairs))
-	}
-	chunkSize := (len(pairs) + workerCount - 1) / workerCount
-
-	var wg sync.WaitGroup
-	var logCh chan string
-	var logWg sync.WaitGroup
-	if verbose {
-		logCh = make(chan string, workerCount)
-		logWg.Add(1)
-		go func() {
-			defer logWg.Done()
-			for message := range logCh {
-				fmt.Println(message)
-			}
-		}()
-	}
-
-	for i := 0; i < len(pairs); i += chunkSize {
-		end := i + chunkSize
-		end = min(end, len(pairs))
-		wg.Add(1)
-		go setEnvFromPairs(pairs[i:end], logCh, fmt.Sprintf("Worker %d", i/chunkSize+1), &wg)
-	}
-
-	wg.Wait()
-	if logCh != nil {
-		close(logCh)
-		logWg.Wait()
-	}
-
-	if verbose {
-		fmt.Printf("Completion time: %f seconds\n", time.Since(start).Seconds())
-	}
+	return os.ReadFile(*filepath)
 }
 
 // splitWords converts a CamelCase field name to UPPER_SNAKE_CASE for env var lookup.
@@ -224,6 +170,68 @@ func setField(fv reflect.Value, val string) error {
 	return nil
 }
 
+// LoadEnv loads environment variables from a .env file using parallel goroutines.
+func LoadEnv(filepath *string, verbose bool) {
+	start := time.Now()
+	if verbose {
+		fmt.Printf("Loading %s\n", filepath)
+	}
+
+	fileBytes, err := readFile(filepath)
+	if err != nil {
+		if verbose {
+			fmt.Printf("Failed to open file: %v\n", err)
+		}
+		return
+	}
+
+	pairs := parseEnvFile(fileBytes)
+	if len(pairs) == 0 {
+		if verbose {
+			fmt.Println("No valid environment variables found.")
+		}
+		return
+	}
+	pairs = dedupePairs(pairs)
+
+	workerCount := 1
+	if len(pairs) >= MAX_ENV_THRESHOLD {
+		workerCount = min(max(runtime.NumCPU(), 1), len(pairs))
+	}
+	chunkSize := (len(pairs) + workerCount - 1) / workerCount
+
+	var wg sync.WaitGroup
+	var logCh chan string
+	var logWg sync.WaitGroup
+	if verbose {
+		logCh = make(chan string, workerCount)
+		logWg.Add(1)
+		go func() {
+			defer logWg.Done()
+			for message := range logCh {
+				fmt.Println(message)
+			}
+		}()
+	}
+
+	for i := 0; i < len(pairs); i += chunkSize {
+		end := i + chunkSize
+		end = min(end, len(pairs))
+		wg.Add(1)
+		go setEnvFromPairs(pairs[i:end], logCh, fmt.Sprintf("Worker %d", i/chunkSize+1), &wg)
+	}
+
+	wg.Wait()
+	if logCh != nil {
+		close(logCh)
+		logWg.Wait()
+	}
+
+	if verbose {
+		fmt.Printf("Completion time: %f seconds\n", time.Since(start).Seconds())
+	}
+}
+
 // Process loads environment variables from an optional .env file into a struct.
 // Supported struct tags:
 //   - envconfig:"KEY"    – env var name to look up (required to process the field, unless split_words is set)
@@ -233,9 +241,9 @@ func setField(fv reflect.Value, val string) error {
 //   - ignored:"true"     – skip the field entirely
 //
 // If filepath is nil, no file is loaded and only existing environment variables are used.
-func Process(filepath *string, s *interface{}) error {
+func Process(s *interface{}, filepath *string) error {
 	if filepath != nil {
-		LoadEnv(*filepath, false)
+		LoadEnv(filepath, false)
 	}
 
 	if s == nil {
