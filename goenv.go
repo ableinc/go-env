@@ -61,14 +61,16 @@ func dedupePairs(pairs []envPair) []envPair {
 		return pairs
 	}
 	seen := make(map[string]struct{}, len(pairs))
-	deduped := make([]envPair, 0, len(pairs))
+	write := len(pairs) - 1
 	for i := len(pairs) - 1; i >= 0; i-- {
 		if _, exists := seen[pairs[i].key]; exists {
 			continue
 		}
 		seen[pairs[i].key] = struct{}{}
-		deduped = append(deduped, pairs[i])
+		pairs[write] = pairs[i]
+		write--
 	}
+	deduped := pairs[write+1:]
 	for i, j := 0, len(deduped)-1; i < j; i, j = i+1, j-1 {
 		deduped[i], deduped[j] = deduped[j], deduped[i]
 	}
