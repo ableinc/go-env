@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"time"
 	"unicode"
 )
 
@@ -117,6 +118,17 @@ func splitWords(name string) string {
 
 // setField assigns a string env value to a struct field, converting to the field's type.
 func setField(fv reflect.Value, val string) error {
+	if fv.Type() == reflect.TypeFor[time.Duration]() {
+		if val == "" {
+			return nil
+		}
+		d, err := time.ParseDuration(val)
+		if err != nil {
+			return err
+		}
+		fv.SetInt(int64(d))
+		return nil
+	}
 	switch fv.Kind() {
 	case reflect.String:
 		fv.SetString(val)
@@ -212,12 +224,15 @@ func Process(s any, filepath ...string) error {
 		return fmt.Errorf("Process: nil struct pointer")
 	}
 
-	// *interface{} -> interface{} -> concrete struct (or pointer to struct)
-	iface := reflect.ValueOf(s).Elem()
-	if iface.Kind() != reflect.Interface {
-		return fmt.Errorf("Process: expected interface, got %s", iface.Kind())
+	rv := reflect.ValueOf(s)
+	if rv.Kind() != reflect.Pointer || rv.IsNil() {
+		return fmt.Errorf("Process: expected non-nil pointer to struct, got %s", rv.Kind())
 	}
-	inner := iface.Elem()
+	inner := rv.Elem()
+	// Unwrap interface or pointer indirection
+	if inner.Kind() == reflect.Interface {
+		inner = inner.Elem()
+	}
 	if inner.Kind() == reflect.Pointer {
 		inner = inner.Elem()
 	}

@@ -29,11 +29,12 @@ Loads a `.env` file (defaults to `.env`) and maps the resulting environment vari
 
 ```go
 type Config struct {
-    Host     string `envconfig:"DB_HOST" required:"true"`
-    Port     int    `envconfig:"DB_PORT" default:"5432"`
-    Password string `envconfig:"DB_PASS"`
-    AppEnv   string `split_words:"true"`  // maps to APP_ENV
-    Internal string `ignored:"true"`
+    Host         string        `envconfig:"DB_HOST"      required:"true"`
+    Port         int           `envconfig:"DB_PORT"      default:"5432"`
+    Password     string        `envconfig:"DB_PASS"`
+    ReadTimeout  time.Duration `envconfig:"READ_TIMEOUT" default:"30s"`
+    AppEnv       string        `split_words:"true"`  // maps to APP_ENV
+    Internal     string        `ignored:"true"`
 }
 
 var cfg Config
@@ -57,7 +58,7 @@ if err := goenv.Process(&cfg, ".env.development"); err != nil {
 | `default:"value"` | Fallback value when the env var is unset or empty. |
 | `ignored:"true"` | Skips the field entirely. |
 
-Supported field types: `string`, `int`/`int8`/`int16`/`int32`/`int64`, `uint`/`uint8`/`uint16`/`uint32`/`uint64`, `float32`/`float64`, `bool`.
+Supported field types: `string`, `int`/`int8`/`int16`/`int32`/`int64`, `uint`/`uint8`/`uint16`/`uint32`/`uint64`, `float32`/`float64`, `bool`, `time.Duration`.
 
 ---
 
