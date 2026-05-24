@@ -1,4 +1,4 @@
-.PHONY: fmt build test tidy
+.PHONY: fmt build test tidy fix
 
 fmt:
 	gofmt -w *.go
@@ -13,4 +13,4 @@ tidy:
 	go mod tidy
 
 fix:
-    go fix -w ./...
+	go fix ./...

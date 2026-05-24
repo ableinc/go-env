@@ -210,7 +210,7 @@ func LoadEnv(filepath ...string) {
 //   - ignored:"true"     – skip the field entirely
 //
 // If no filepath is provided, DEFAULT_ENV_FILE (".env") is loaded.
-func Process(s interface{}, filepath ...string) error {
+func Process(s any, filepath ...string) error {
 	LoadEnv(filepath...)
 
 	if s == nil {
