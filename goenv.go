@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
-	"time"
 	"unicode"
 )
 
@@ -74,11 +73,7 @@ func dedupePairs(pairs []envPair) []envPair {
 		pairs[write] = pairs[i]
 		write--
 	}
-	deduped := pairs[write+1:]
-	for i, j := 0, len(deduped)-1; i < j; i, j = i+1, j-1 {
-		deduped[i], deduped[j] = deduped[j], deduped[i]
-	}
-	return deduped
+	return pairs[write+1:]
 }
 
 // setEnvFromPairs sets environment variables from key/value pairs.
@@ -94,16 +89,16 @@ func setEnvFromPairs(pairs []envPair, ch chan<- string, name string, wg *sync.Wa
 	}
 }
 
-// readFile reads the .env file contents, defaulting to .env if filepath is nil.
-func readFile(filepath *string) ([]byte, error) {
-	if filepath == nil {
+// readFile reads the .env file contents, defaulting to DEFAULT_ENV_FILE if no path is given.
+func readFile(filepath string) ([]byte, error) {
+	if filepath == "" {
 		return os.ReadFile(DEFAULT_ENV_FILE)
 	}
-	return os.ReadFile(*filepath)
+	return os.ReadFile(filepath)
 }
 
 // splitWords converts a CamelCase field name to UPPER_SNAKE_CASE for env var lookup.
-// e.g. "ManualOverride" -> "MANUAL_OVERRIDE", "DBHost" -> "D_B_HOST"
+// e.g. "ManualOverride" -> "MANUAL_OVERRIDE", "DBHost" -> "DB_HOST"
 func splitWords(name string) string {
 	var buf bytes.Buffer
 	runes := []rune(name)
@@ -171,25 +166,20 @@ func setField(fv reflect.Value, val string) error {
 }
 
 // LoadEnv loads environment variables from a .env file using parallel goroutines.
-func LoadEnv(filepath *string, verbose bool) {
-	start := time.Now()
-	if verbose {
-		fmt.Printf("Loading %s\n", filepath)
+// If no filepath is provided, it defaults to DEFAULT_ENV_FILE (".env").
+func LoadEnv(filepath ...string) {
+	file := ""
+	if len(filepath) > 0 {
+		file = filepath[0]
 	}
 
-	fileBytes, err := readFile(filepath)
+	fileBytes, err := readFile(file)
 	if err != nil {
-		if verbose {
-			fmt.Printf("Failed to open file: %v\n", err)
-		}
 		return
 	}
 
 	pairs := parseEnvFile(fileBytes)
 	if len(pairs) == 0 {
-		if verbose {
-			fmt.Println("No valid environment variables found.")
-		}
 		return
 	}
 	pairs = dedupePairs(pairs)
@@ -201,35 +191,14 @@ func LoadEnv(filepath *string, verbose bool) {
 	chunkSize := (len(pairs) + workerCount - 1) / workerCount
 
 	var wg sync.WaitGroup
-	var logCh chan string
-	var logWg sync.WaitGroup
-	if verbose {
-		logCh = make(chan string, workerCount)
-		logWg.Add(1)
-		go func() {
-			defer logWg.Done()
-			for message := range logCh {
-				fmt.Println(message)
-			}
-		}()
-	}
 
 	for i := 0; i < len(pairs); i += chunkSize {
-		end := i + chunkSize
-		end = min(end, len(pairs))
+		end := min(i+chunkSize, len(pairs))
 		wg.Add(1)
-		go setEnvFromPairs(pairs[i:end], logCh, fmt.Sprintf("Worker %d", i/chunkSize+1), &wg)
+		go setEnvFromPairs(pairs[i:end], nil, fmt.Sprintf("Worker %d", i/chunkSize+1), &wg)
 	}
 
 	wg.Wait()
-	if logCh != nil {
-		close(logCh)
-		logWg.Wait()
-	}
-
-	if verbose {
-		fmt.Printf("Completion time: %f seconds\n", time.Since(start).Seconds())
-	}
 }
 
 // Process loads environment variables from an optional .env file into a struct.
@@ -240,11 +209,9 @@ func LoadEnv(filepath *string, verbose bool) {
 //   - default:"value"    – fallback value when the env var is unset or empty
 //   - ignored:"true"     – skip the field entirely
 //
-// If filepath is nil, no file is loaded and only existing environment variables are used.
-func Process(s *interface{}, filepath *string) error {
-	if filepath != nil {
-		LoadEnv(filepath, false)
-	}
+// If no filepath is provided, DEFAULT_ENV_FILE (".env") is loaded.
+func Process(s interface{}, filepath ...string) error {
+	LoadEnv(filepath...)
 
 	if s == nil {
 		return fmt.Errorf("Process: nil struct pointer")
@@ -256,7 +223,7 @@ func Process(s *interface{}, filepath *string) error {
 		return fmt.Errorf("Process: expected interface, got %s", iface.Kind())
 	}
 	inner := iface.Elem()
-	if inner.Kind() == reflect.Ptr {
+	if inner.Kind() == reflect.Pointer {
 		inner = inner.Elem()
 	}
 	if inner.Kind() != reflect.Struct {

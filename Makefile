@@ -11,3 +11,6 @@ test:
 
 tidy:
 	go mod tidy
+
+fix:
+    go fix -w ./...

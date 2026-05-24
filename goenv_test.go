@@ -19,7 +19,7 @@ func fixturePath(t *testing.T, name string) string {
 func TestLoadEnvBasic(t *testing.T) {
 	file := fixturePath(t, "basic.env.test")
 
-	LoadEnv(file, false)
+	LoadEnv(file)
 
 	tests := map[string]string{
 		"APP_ENV": "production",
@@ -40,7 +40,7 @@ func TestLoadEnvBasic(t *testing.T) {
 func TestLoadEnvUnder50File(t *testing.T) {
 	file := fixturePath(t, "under-50.env.test")
 
-	LoadEnv(file, false)
+	LoadEnv(file)
 
 	tests := map[string]string{
 		"UKEY01": "VALUE01",
@@ -58,7 +58,7 @@ func TestLoadEnvUnder50File(t *testing.T) {
 func TestLoadEnvOver50File(t *testing.T) {
 	file := fixturePath(t, "over-50.env.test")
 
-	LoadEnv(file, false)
+	LoadEnv(file)
 
 	tests := map[string]string{
 		"OKEY01": "VALUE01",
@@ -76,7 +76,7 @@ func TestLoadEnvOver50File(t *testing.T) {
 func TestLoadEnvIgnoresInvalidLines(t *testing.T) {
 	file := fixturePath(t, "invalid.env.test")
 
-	LoadEnv(file, false)
+	LoadEnv(file)
 
 	t.Cleanup(func() { _ = os.Unsetenv("VALID_KEY") })
 	t.Cleanup(func() { _ = os.Unsetenv("ANOTHER_VALID") })
@@ -95,7 +95,7 @@ func TestLoadEnvDuplicateKeysLastWins(t *testing.T) {
 	file := fixturePath(t, "duplicate.env.test")
 	defer os.Unsetenv("DUP_KEY")
 
-	LoadEnv(file, false)
+	LoadEnv(file)
 
 	if os.Getenv("DUP_KEY") != "second" {
 		t.Error("DUP_KEY should use the last value in the file")
